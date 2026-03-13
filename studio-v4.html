@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<title>연구 스튜디오 v4.0</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700&family=Nanum+Gothic+Coding&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;}
+body{font-family:'Nanum Myeongjo',serif;}
+code,textarea,input,pre{font-family:'Nanum Gothic Coding',monospace;}
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:10px;}
+.tree-item{transition:background .12s;}
+.tree-item:hover{background:#f1f5f9;}
+.tree-item.active-item{background:#eff6ff;border-left:3px solid #4f46e5;font-weight:700;color:#4f46e5;}
+.verse-item{transition:background .12s,border-left .12s;}
+.verse-item:hover{background:#f8fafc;cursor:pointer;}
+.verse-item.synced{background:#eef2ff;border-left:3px solid #6366f1;padding-left:9px;}
+.comment-card{transition:box-shadow .2s,border-color .2s,background .2s;}
+.comment-card.highlight{border-color:#4f46e5!important;background:#f5f3ff!important;box-shadow:0 4px 20px rgba(79,70,229,.13);}
+.comment-card.scroll-sync{border-left:3px solid #f59e0b;box-shadow:0 4px 16px rgba(245,158,11,.12);}
+textarea.locked{background:#fafafa!important;color:#6b7280;cursor:default;}
+#drag-popup{
+  position:fixed;display:none;z-index:9999;
+  background:#1e1b4b;color:#e0e7ff;
+  border-radius:8px;padding:6px 14px;font-size:11px;
+  box-shadow:0 8px 28px rgba(0,0,0,.35);
+  cursor:pointer;white-space:nowrap;
+  font-family:'Nanum Gothic Coding',monospace;
+}
+#drag-popup::after{
+  content:'';position:absolute;bottom:-6px;left:50%;
+  transform:translateX(-50%);
+  border:6px solid transparent;border-bottom:none;border-top-color:#1e1b4b;
+}
+#drag-popup:hover{background:#312e81;}
+.q-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  background:#ede9fe;border-left:3px solid #6366f1;
+  color:#4338ca;font-size:10px;
+  padding:3px 8px;border-radius:0 5px 5px 0;
+  margin-bottom:3px;
+  font-family:'Nanum Gothic Coding',monospace;
+}
+.q-badge button{color:#a5b4fc;font-size:14px;line-height:1;cursor:pointer;}
+.q-badge button:hover{color:#ef4444;}
+.bl-tag{
+  font-size:10px;background:#e0e7ff;color:#4338ca;
+  padding:2px 8px;border-radius:4px;cursor:pointer;
+  transition:background .12s;
+  font-family:'Nanum Gothic Coding',monospace;
+}
+.bl-tag:hover{background:#c7d2fe;}
+.verse-link{
+  color:#4f46e5;border-bottom:1px dashed #a5b4fc;
+  cursor:pointer;font-weight:600;
+}
+.verse-link:hover{color:#3730a3;border-bottom-color:#6366f1;}
+#toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(16px);
+  background:#1e1b4b;color:#e0e7ff;padding:8px 20px;border-radius:20px;
+  font-size:12px;opacity:0;transition:all .22s;pointer-events:none;z-index:9998;
+  font-family:'Nanum Gothic Coding',monospace;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden text-slate-800">
+
+<header class="bg-white border-b px-4 py-2.5 flex justify-between items-center shadow-sm z-20">
+  <div class="flex items-center gap-3">
+    <span class="font-black text-indigo-600 tracking-tight text-sm">STUDIO <span class="text-indigo-300">v4.0</span></span>
+    <div class="w-px h-4 bg-slate-200"></div>
+    <button id="lock-btn" onclick="toggleLock()"
+      class="text-[11px] px-3 py-1.5 rounded-full font-bold transition-all bg-slate-800 text-white">
+      🔒 읽기 모드
+    </button>
+    <span id="lock-hint" class="text-[10px] text-slate-400 hidden">편집 가능 — 실수 방지를 위해 잠금을 권장합니다</span>
+  </div>
+  <div class="flex gap-2">
+    <button onclick="addRoot()"
+      class="text-[11px] border border-slate-200 px-3 py-1.5 rounded-md hover:bg-slate-50 transition">
+      + 루트 추가
+    </button>
+    <button onclick="saveAll()"
+      class="text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-md shadow-sm transition">
+      💾 전체 저장
+    </button>
+  </div>
+</header>
+
+<main class="flex-1 flex overflow-hidden">
+  <aside class="w-56 bg-white border-r flex flex-col">
+    <div class="px-3 py-2 border-b text-[10px] font-black text-slate-400 uppercase tracking-widest">라이브러리</div>
+    <div id="tree-container" class="flex-1 overflow-y-auto p-2 space-y-0.5"></div>
+  </aside>
+
+  <section class="w-2/5 bg-white border-r flex flex-col">
+    <div class="px-4 py-2.5 border-b bg-slate-50 flex justify-between items-center">
+      <span id="current-path" class="text-xs font-bold text-indigo-600 truncate">본문을 선택하세요</span>
+      <button onclick="importText()"
+        class="text-[10px] text-slate-400 hover:text-indigo-500 transition shrink-0 ml-2">본문 수정</button>
+    </div>
+    <div id="verse-scroll" class="flex-1 overflow-y-auto">
+      <div id="verse-list" class="p-5 space-y-1">
+        <div class="text-center text-slate-300 mt-20 text-sm">좌측에서 장을 선택하세요.</div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="flex-1 bg-slate-50 flex flex-col overflow-hidden">
+    <div class="px-4 py-2.5 border-b bg-white flex justify-between items-center">
+      <span class="text-xs font-bold text-slate-500">연구 노트 & 역참조</span>
+      <span class="text-[10px] text-emerald-500">● 실시간 동기화</span>
+    </div>
+    <div id="comment-scroll" class="flex-1 overflow-y-auto">
+      <div class="p-4 pb-28 space-y-4">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <label class="block text-[9px] font-black text-indigo-400 mb-2 uppercase tracking-widest">Chapter Summary</label>
+          <textarea id="chapter-note" rows="4"
+            class="w-full text-sm focus:outline-none leading-relaxed resize-none bg-transparent"
+            placeholder="이 장 전체를 관통하는 핵심 메시지를 기록하세요…"></textarea>
+        </div>
+        <div id="verse-comments" class="space-y-4"></div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div id="drag-popup">✦ 주석에 인용하기</div>
+<div id="toast"></div>
+
+<script>
+let db           = JSON.parse(localStorage.getItem('studioV4')) || [];
+let activeFileId = null;
+let isLocked     = true;
+let pendingQuote = null;
+let syncFromComment = false;
+let syncFromVerse   = false;
+let syncRAF         = null;
+
+function toggleLock() {
+  isLocked = !isLocked;
+  const btn  = document.getElementById('lock-btn');
+  const hint = document.getElementById('lock-hint');
+  if (isLocked) {
+    btn.textContent = '🔒 읽기 모드';
+    btn.className = 'text-[11px] px-3 py-1.5 rounded-full font-bold transition-all bg-slate-800 text-white';
+    hint.classList.add('hidden');
+  } else {
+    btn.textContent = '🔓 편집 모드';
+    btn.className = 'text-[11px] px-3 py-1.5 rounded-full font-bold transition-all bg-red-500 text-white';
+    hint.classList.remove('hidden');
+  }
+  document.querySelectorAll('textarea,input[type=text]').forEach(el => {
+    el.readOnly = isLocked;
+    if (el.tagName === 'TEXTAREA') el.classList.toggle('locked', isLocked);
+  });
+}
+
+function addRoot() {
+  const name = prompt('루트 이름 (예: 구약, 신약, 어거스틴 설교)');
+  if (name) { db.push({ id: Date.now(), name, children: [], type: 'root' }); renderTree(); }
+}
+
+function addChild(parentId, type) {
+  const label = type === 'folder' ? '책 이름 (예: 창세기)' : '장 이름 (예: 1장)';
+  const name  = prompt(label);
+  if (!name) return;
+  const parent = findById(db, parentId);
+  parent.children.push({ id: Date.now(), name, type, children: [], chapterNote: '', verses: [] });
+  renderTree();
+}
+
+function renderTree() {
+  const container = document.getElementById('tree-container');
+  container.innerHTML = '';
+  function node(item, depth) {
+    const d = document.createElement('div');
+    d.className = `tree-item flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer text-[13px] ${activeFileId === item.id ? 'active-item' : ''}`;
+    d.style.paddingLeft = `${8 + depth * 14}px`;
+    const icon  = item.type === 'root' ? '📂' : (item.type === 'folder' ? '📖' : '📄');
+    const label = document.createElement('span');
+    label.textContent = `${icon} ${item.name}`;
+    label.className   = 'truncate flex-1';
+    if (item.type === 'file') label.onclick = () => renderFile(item.id);
+    d.appendChild(label);
+    if (item.type !== 'file') {
+      const btn = document.createElement('button');
+      btn.textContent = '+';
+      btn.className   = 'text-slate-300 hover:text-indigo-500 px-1 text-base leading-none flex-shrink-0';
+      btn.onclick     = e => { e.stopPropagation(); addChild(item.id, item.type === 'root' ? 'folder' : 'file'); };
+      d.appendChild(btn);
+    }
+    container.appendChild(d);
+    (item.children || []).forEach(c => node(c, depth + 1));
+  }
+  db.forEach(r => node(r, 0));
+}
+
+function importText() {
+  if (!activeFileId) return alert('장을 먼저 선택하세요.');
+  if (isLocked) return toast('🔒 편집 모드로 전환 후 수정하세요.');
+  const raw = prompt('본문을 붙여넣으세요.\n(엔터로 절이 구분됩니다)');
+  if (!raw) return;
+  const file  = findById(db, activeFileId);
+  file.verses = raw.split('\n').filter(t => t.trim()).map((text, i) => ({
+    num: i + 1, text: text.trim(), note: '', tags: '', quotes: []
+  }));
+  renderFile(activeFileId);
+}
+
+function renderFile(id) {
+  activeFileId = id;
+  const file     = findById(db, id);
+  const bookName = getParentName(db, id) || '';
+  document.getElementById('current-path').textContent = bookName ? `${bookName} › ${file.name}` : file.name;
+
+  const vList = document.getElementById('verse-list');
+  vList.innerHTML = file.verses.length
+    ? file.verses.map(v => `
+        <div class="verse-item px-3 py-2 rounded-md" id="verse-row-${v.num}" onclick="clickVerse(${v.num})">
+          <span class="text-[10px] font-bold text-indigo-400 select-none mr-2">${v.num}</span>
+          <span class="text-[15px] leading-relaxed">${escHtml(v.text)}</span>
+        </div>`).join('')
+    : '<div class="text-center text-slate-300 mt-16 text-sm">본문을 붙여넣으세요.</div>';
+
+  document.getElementById('chapter-note').value = file.chapterNote || '';
+  document.getElementById('verse-comments').innerHTML =
+    file.verses.map(v => buildCard(v, file, bookName)).join('');
+
+  document.querySelectorAll('textarea,input[type=text]').forEach(el => {
+    el.readOnly = isLocked;
+    if (el.tagName === 'TEXTAREA') el.classList.toggle('locked', isLocked);
+  });
+
+  setupScrollSync();
+  setupDragQuote();
+  renderTree();
+}
+
+function buildCard(v, file, bookName) {
+  const chapNum    = (file.name.match(/\d+/) || [''])[0];
+  const currentRef = `${bookName} ${chapNum}:${v.num}`;
+  const backlinks  = getBacklinks(currentRef);
+  const blHTML     = backlinks.length
+    ? backlinks.map(bl => `<span class="bl-tag" onclick="jumpToRef('${bl.addr}')">${bl.addr}</span>`).join('')
+    : '<span class="text-[9px] text-slate-300 italic">연결된 구절 없음</span>';
+
+  const quotesHTML = (v.quotes || []).map((q, qi) => `
+    <div class="q-badge" id="qb-${v.num}-${qi}">
+      <span>"${escHtml(q)}"</span>
+      <button onclick="removeQuote(${v.num},${qi})" title="인용 제거">×</button>
+    </div>`).join('');
+
+  const linkedNote = linkifyVerses(escHtml(v.note || ''));
+
+  return `
+  <div class="comment-card bg-white rounded-xl border border-slate-200 shadow-sm p-4"
+       id="comment-card-${v.num}">
+    <div class="flex justify-between items-center mb-3">
+      <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${v.num}절 주석</span>
+      <input type="text" placeholder="#태그"
+             class="text-[10px] border border-slate-200 rounded px-2 py-0.5 w-28
+                    focus:ring-1 focus:ring-indigo-300 focus:border-indigo-300"
+             value="${escHtml(v.tags || '')}"
+             onchange="updateVerse(${v.num},'tags',this.value)">
+    </div>
+    <div id="qa-${v.num}" class="flex flex-col gap-0.5 mb-2">${quotesHTML}</div>
+    ${!v.note ? `<p class="text-[11px] text-slate-400 italic mb-2 leading-snug line-clamp-2">"${escHtml(v.text.substring(0,50))}…"</p>` : ''}
+    <textarea rows="3"
+              class="w-full text-sm leading-relaxed focus:outline-none resize-none
+                     focus:ring-1 focus:ring-indigo-200 rounded p-1 transition"
+              id="ta-${v.num}"
+              onchange="updateVerse(${v.num},'note',this.value)"
+              placeholder="묵상 내용을 기록하세요…">${escHtml(v.note || '')}</textarea>
+    ${v.note ? `<div class="mt-2 text-[12px] leading-relaxed text-slate-600 p-1">${linkedNote}</div>` : ''}
+    <div class="mt-3 pt-3 border-t border-slate-100">
+      <span class="text-[9px] font-bold text-slate-300 uppercase tracking-widest block mb-1.5">
+        Backlinks — 이 구절을 언급한 노트
+      </span>
+      <div class="flex flex-wrap gap-1.5">${blHTML}</div>
+    </div>
+  </div>`;
+}
+
+function clickVerse(num) {
+  const card = document.getElementById(`comment-card-${num}`);
+  if (!card) return;
+  document.querySelectorAll('.comment-card').forEach(el => el.classList.remove('highlight'));
+  card.classList.add('highlight');
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function setupScrollSync() {
+  const cs = document.getElementById('comment-scroll');
+  const vs = document.getElementById('verse-scroll');
+  cs.onscroll = null;
+  vs.onscroll = null;
+
+  cs.addEventListener('scroll', () => {
+    if (syncFromVerse) return;
+    cancelAnimationFrame(syncRAF);
+    syncRAF = requestAnimationFrame(() => {
+      syncFromComment = true;
+      const file = findById(db, activeFileId);
+      if (!file?.verses?.length) { syncFromComment = false; return; }
+      const mid = cs.scrollTop + cs.clientHeight / 2;
+      let closestNum = file.verses[0].num, closestDist = Infinity;
+      file.verses.forEach(v => {
+        const card = document.getElementById(`comment-card-${v.num}`);
+        if (!card) return;
+        const cardRect = card.getBoundingClientRect();
+        const csRect   = cs.getBoundingClientRect();
+        const cardMidY = cs.scrollTop + (cardRect.top - csRect.top) + card.offsetHeight / 2;
+        const dist     = Math.abs(cardMidY - mid);
+        if (dist < closestDist) { closestDist = dist; closestNum = v.num; }
+      });
+      const row = document.getElementById(`verse-row-${closestNum}`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.querySelectorAll('.verse-item').forEach(el => el.classList.remove('synced'));
+        row.classList.add('synced');
+      }
+      setTimeout(() => { syncFromComment = false; }, 100);
+    });
+  }, { passive: true });
+
+  vs.addEventListener('scroll', () => {
+    if (syncFromComment) return;
+    cancelAnimationFrame(syncRAF);
+    syncRAF = requestAnimationFrame(() => {
+      syncFromVerse = true;
+      const file = findById(db, activeFileId);
+      if (!file?.verses?.length) { syncFromVerse = false; return; }
+      const mid = vs.scrollTop + vs.clientHeight / 2;
+      let closestNum = file.verses[0].num, closestDist = Infinity;
+      file.verses.forEach(v => {
+        const row = document.getElementById(`verse-row-${v.num}`);
+        if (!row) return;
+        const rowRect  = row.getBoundingClientRect();
+        const vsRect   = vs.getBoundingClientRect();
+        const rowMidY  = vs.scrollTop + (rowRect.top - vsRect.top) + row.offsetHeight / 2;
+        const dist     = Math.abs(rowMidY - mid);
+        if (dist < closestDist) { closestDist = dist; closestNum = v.num; }
+      });
+      const card = document.getElementById(`comment-card-${closestNum}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.querySelectorAll('.comment-card').forEach(el => el.classList.remove('scroll-sync'));
+        card.classList.add('scroll-sync');
+        setTimeout(() => card.classList.remove('scroll-sync'), 1000);
+      }
+      setTimeout(() => { syncFromVerse = false; }, 100);
+    });
+  }, { passive: true });
+}
+
+function setupDragQuote() {
+  document.removeEventListener('mouseup',   onMouseUp);
+  document.removeEventListener('mousedown', onMouseDown);
+  document.addEventListener('mouseup',   onMouseUp);
+  document.addEventListener('mousedown', onMouseDown);
+  document.getElementById('drag-popup').onclick = insertQuote;
+}
+
+function onMouseDown(e) {
+  if (!e.target.closest('#drag-popup')) hideDragPopup();
+}
+
+function onMouseUp(e) {
+  if (e.target.closest('#drag-popup')) return;
+  const sel  = window.getSelection();
+  const word = sel?.toString().trim();
+  if (!word || word.length < 2) { hideDragPopup(); return; }
+  const vList = document.getElementById('verse-list');
+  let node = sel.anchorNode, inside = false;
+  while (node) { if (node === vList) { inside = true; break; } node = node.parentNode; }
+  if (!inside) { hideDragPopup(); return; }
+  let verseNum = null;
+  node = sel.anchorNode;
+  while (node && node !== vList) {
+    if (node.id?.startsWith('verse-row-')) { verseNum = parseInt(node.id.replace('verse-row-','')); break; }
+    node = node.parentNode;
+  }
+  if (!verseNum) { hideDragPopup(); return; }
+  const rect  = sel.getRangeAt(0).getBoundingClientRect();
+  const popup = document.getElementById('drag-popup');
+  pendingQuote = { verseNum, text: word };
+  popup.style.display = 'block';
+  requestAnimationFrame(() => {
+    popup.style.left = `${rect.left + rect.width / 2 - popup.offsetWidth / 2}px`;
+    popup.style.top  = `${rect.top  - 44 + window.scrollY}px`;
+  });
+}
+
+function hideDragPopup() {
+  document.getElementById('drag-popup').style.display = 'none';
+  pendingQuote = null;
+}
+
+function insertQuote() {
+  if (!pendingQuote) return;
+  const { verseNum, text } = pendingQuote;
+  const file  = findById(db, activeFileId);
+  const verse = file?.verses.find(v => v.num === verseNum);
+  if (!verse) return;
+  verse.quotes = verse.quotes || [];
+  verse.quotes.push(text);
+  const area = document.getElementById(`qa-${verseNum}`);
+  if (area) {
+    const qi    = verse.quotes.length - 1;
+    const badge = document.createElement('div');
+    badge.className = 'q-badge';
+    badge.id        = `qb-${verseNum}-${qi}`;
+    badge.innerHTML = `<span>"${escHtml(text)}"</span><button onclick="removeQuote(${verseNum},${qi})" title="인용 제거">×</button>`;
+    area.appendChild(badge);
+  }
+  const card = document.getElementById(`comment-card-${verseNum}`);
+  if (card) {
+    document.querySelectorAll('.comment-card').forEach(el => el.classList.remove('highlight'));
+    card.classList.add('highlight');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  document.getElementById(`ta-${verseNum}`)?.focus();
+  hideDragPopup();
+  window.getSelection()?.removeAllRanges();
+  toast('📌 인용이 주석 카드에 추가되었습니다');
+}
+
+function removeQuote(verseNum, qi) {
+  const file  = findById(db, activeFileId);
+  const verse = file?.verses.find(v => v.num === verseNum);
+  if (!verse?.quotes) return;
+  verse.quotes.splice(qi, 1);
+  const bookName = getParentName(db, activeFileId) || '';
+  const card     = document.getElementById(`comment-card-${verseNum}`);
+  if (card) card.outerHTML = buildCard(verse, file, bookName);
+  document.querySelectorAll('textarea,input[type=text]').forEach(el => {
+    el.readOnly = isLocked;
+    if (el.tagName === 'TEXTAREA') el.classList.toggle('locked', isLocked);
+  });
+}
+
+function getBacklinks(ref) {
+  const results = [];
+  function scan(items, bookCtx) {
+    items.forEach(item => {
+      if (item.type === 'file') {
+        const chapNum = (item.name.match(/\d+/) || [''])[0];
+        item.verses.forEach(v => {
+          if (v.note && v.note.includes(ref)) {
+            results.push({ addr: `${bookCtx} ${chapNum}:${v.num}`, fileId: item.id, vNum: v.num });
+          }
+        });
+      } else {
+        scan(item.children || [], item.type === 'folder' ? item.name : bookCtx);
+      }
+    });
+  }
+  scan(db, '');
+  return results;
+}
+
+const VERSE_RE = /([가-힣]+)\s*(\d+):(\d+)/g;
+function linkifyVerses(html) {
+  return html.replace(VERSE_RE, (match, book, chap, verse) =>
+    `<span class="verse-link" onclick="jumpToRef('${book} ${chap}:${verse}')">${match}</span>`
+  );
+}
+
+function jumpToRef(addr) {
+  const m = addr.match(/([가-힣]+)\s*(\d+):(\d+)/);
+  if (!m) return;
+  const [, book, chap, verse] = m;
+  function findFile(items) {
+    for (const item of items) {
+      if (item.type === 'folder' && item.name.includes(book)) {
+        const ch = item.children?.find(c => c.type === 'file' && c.name.includes(chap));
+        if (ch) return ch.id;
+      }
+      if (item.children) { const found = findFile(item.children); if (found) return found; }
+    }
+  }
+  const fileId = findFile(db);
+  if (!fileId) { toast(`⚠ "${book} ${chap}장"을 찾을 수 없습니다`); return; }
+  renderFile(fileId);
+  setTimeout(() => clickVerse(parseInt(verse)), 200);
+}
+
+function updateVerse(num, field, value) {
+  const file  = findById(db, activeFileId);
+  const verse = file?.verses.find(v => v.num === num);
+  if (verse) verse[field] = value;
+}
+
+function saveAll() {
+  if (activeFileId) {
+    const file = findById(db, activeFileId);
+    if (file) {
+      file.chapterNote = document.getElementById('chapter-note').value;
+      (file.verses || []).forEach(v => {
+        const ta = document.getElementById(`ta-${v.num}`);
+        if (ta) v.note = ta.value;
+      });
+    }
+  }
+  localStorage.setItem('studioV4', JSON.stringify(db));
+  toast('✅ 저장 완료');
+  if (activeFileId) renderFile(activeFileId);
+}
+
+function findById(list, id) {
+  for (const item of list) {
+    if (item.id === id) return item;
+    if (item.children) { const f = findById(item.children, id); if (f) return f; }
+  }
+}
+
+function getParentName(list, id, last = '') {
+  for (const item of list) {
+    if (item.id === id) return last;
+    if (item.children) {
+      const r = getParentName(item.children, id, item.type === 'folder' ? item.name : last);
+      if (r !== null) return r;
+    }
+  }
+  return null;
+}
+
+function escHtml(s = '') {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); saveAll(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'l') { e.preventDefault(); toggleLock(); }
+});
+
+renderTree();
+</script>
+</body>
+</html>
